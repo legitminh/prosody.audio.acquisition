@@ -1,8 +1,11 @@
 import subprocess
+# from tqdm import tqdm
+from time import time
 import yt_dlp.utils
 import yt_dlp
 from typing import Any
 from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 DIR_URLS = Path("urls")
 
@@ -49,6 +52,21 @@ def download_youtube_segment(video_url, start_time, end_time, output_name="segme
     except Exception as e:
         print(f"An error occurred: {e}")
 
+def download_youtube_segment_cli(video_url, start_time, end_time, output_name="segment"):
+    subprocess.run(
+        [
+            "yt-dlp",
+            "-x",
+            "--audio-format",
+            "wav",
+            "--download-sections",
+            f"*{start_time}-{end_time}",
+            "-o",
+            str(DUR_WAV_MUCHASIDID / f"{output_name}.%(ext)s"),
+            video_url,
+        ],
+        # check=True,
+    )
 def separate_by_separators(line, sep):
     for i, v in enumerate(sep):
         index = line.find(v)
@@ -58,7 +76,9 @@ def separate_by_separators(line, sep):
 
 DUR_URL_MUCHASIDID = DIR_URLS / "muchasidid.txt"
 DUR_WAV_MUCHASIDID = DIR_WAV / "muchasidid.txt"
+
 with DUR_URL_MUCHASIDID.open() as f:
+    start_time = time()
     lines = f.readlines()
     for i, line in enumerate(lines):
         _, code, start, end = separate_by_separators(line, SEPARATORS)
@@ -66,27 +86,17 @@ with DUR_URL_MUCHASIDID.open() as f:
         outtmpl = str(DIR_WAV / f"{i}.wav")
         print(f"Code: {code}, Start: {start}, End: {end}")
 
-        # download_youtube_segment(
-        #     video_url=f"https://www.youtube.com/watch?v={code}",
-        #     start_time=int(start),
-        #     end_time=int(end),
-        #     output_name=str(DIR_WAV / f"{i}")
-        # )
-
         """
         yt-dlp -x --audio-format wav --download-sections "*150-160" -o "my_audio_clip.%(ext)s" "https://www.youtube.com/watch?v=yLhX3goJgPs"
         """
-        subprocess.run(
-            [
-                "yt-dlp",
-                "-x",
-                "--audio-format",
-                "wav",
-                "--download-sections",
-                f"*{start}-{end}",
-                "-o",
-                str(DUR_WAV_MUCHASIDID / f"{i}.%(ext)s"),
-                f"https://www.youtube.com/watch?v={code}",
-            ],
-            # check=True,
-        )
+
+        with ThreadPoolExecutor(max_workers=5) as executor:
+            executor.submit(
+                download_youtube_segment_cli,
+                video_url=f"https://www.youtube.com/watch?v={code}",
+                start_time=int(start),
+                end_time=int(end),
+                output_name=str(DIR_WAV / f"{i}")
+            )
+    end_time = time()
+    print(f"Total processing time: {end_time - start_time} seconds")
